@@ -14,7 +14,7 @@ import io.github.qeroney.config.properties.MessageTemplate
 import io.github.qeroney.service.notification.SendNotificationService
 import io.github.qeroney.service.user.TelegramUserService
 import io.github.qeroney.service.user.argument.CreateTelegramUser
-import java.util.UUID
+import kotlin.random.Random
 
 @HandlerComponent
 class StartHandler(
@@ -31,8 +31,7 @@ class StartHandler(
         return map
     }
 
-    command("/start", next = "get_fullName") {
-        transfer(mutableMapOf<String, Any>())
+    command("/start") {
         sendMessage(template.getStartWelcome,
             replyMarkup = inlineKeyboard(callbackButton(template.getRegistration, "get_fullName")))
     }
@@ -47,7 +46,7 @@ class StartHandler(
 
         continueTransferringPlus("fullName" to input)
 
-        sendMessage(template.getFullNameSaved.replace("{fullName}", input), replyMarkup = removeKeyboard())
+        sendMessage(template.getFullNameSaved with mapOf("fullName" to input), replyMarkup = removeKeyboard())
         sendMessage(template.getEmailPrompt, replyMarkup = removeKeyboard())
     }
 
@@ -55,16 +54,16 @@ class StartHandler(
         val email = text.trim().lowercase()
         if (!emailRegex.matches(email)) throw ChatException(template.getEmailFormatError)
 
-        val verificationCode = UUID.randomUUID().toString().take(6).lowercase()
+        val verificationCode = Random.nextInt(0, 1_000_000).let { String.format("%06d", it) }
         continueTransferringPlus("email" to email, "verificationCode" to verificationCode)
 
         notificationService.sendVerificationCodeToEmail(email, verificationCode)
-        sendMessage(template.getEmailSent.replace("{email}", email),
+        sendMessage(template.getEmailSent with mapOf("email" to email),
                     replyMarkup = inlineKeyboard(callbackButton(template.getEmailChange, "get_change_email")))
     }
 
     callback("get_change_email", next = "get_email") {
-        transferred<MutableMap<String, Any>>()
+        transfer(transferred())
         sendMessage(template.getNewEmail, replyMarkup = removeKeyboard())
     }
 
@@ -76,7 +75,7 @@ class StartHandler(
 
         if (inputCode != realCode) throw ChatException(template.getEmailCodeMismatchError)
 
-        sendMessage(template.getEmailSaved.replace("{email}", map["email"].toString()), replyMarkup = removeKeyboard())
+        sendMessage(template.getEmailSaved with mapOf("email" to map["email"].toString()), replyMarkup = removeKeyboard())
         sendMessage(template.getAskContact, replyMarkup = contactKeyboard(template.getSendContact))
     }
 
@@ -97,7 +96,7 @@ class StartHandler(
             phone    = phone)
         telegramUserService.upsert(createUser)
 
-        sendMessage(template.getContactSaved.replace("{phone}", phone), replyMarkup = removeKeyboard())
+        sendMessage(template.getContactSaved with mapOf("phone" to phone), replyMarkup = removeKeyboard())
         sendMessage(template.getRegistrationSuccess,
                     replyMarkup = inlineKeyboard(
                         callbackButton(template.getCreateTicketButton, "create_ticket"),

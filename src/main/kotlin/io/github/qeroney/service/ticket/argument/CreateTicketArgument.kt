@@ -4,8 +4,8 @@ import io.github.qeroney.model.Attachment
 import io.github.qeroney.model.TelegramUser
 
 data class CreateTicketArgument (
-    val description: String? = null,
+    val description: String?,
     val files: List<Attachment>,
-    val attachmentCount: Int? = 0,
-    val owner: TelegramUser,
+    val attachmentCount: Int,
+    val owner: TelegramUser
 )

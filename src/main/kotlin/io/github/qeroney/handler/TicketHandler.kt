@@ -7,7 +7,6 @@ import io.github.dehuckakpyt.telegrambot.container.message.MessageType.PHOTO
 import io.github.dehuckakpyt.telegrambot.container.message.MessageType.TEXT
 import io.github.dehuckakpyt.telegrambot.ext.container.fromId
 import io.github.dehuckakpyt.telegrambot.factory.keyboard.inlineKeyboard
-import io.github.dehuckakpyt.telegrambot.factory.keyboard.removeKeyboard
 import io.github.dehuckakpyt.telegrambot.handler.BotHandler
 import io.github.qeroney.config.properties.MessageTemplate
 import io.github.qeroney.model.Attachment
@@ -15,7 +14,7 @@ import io.github.qeroney.model.FileType
 import io.github.qeroney.service.ticket.TicketService
 import io.github.qeroney.service.ticket.argument.CreateTicketArgument
 import io.github.qeroney.service.user.TelegramUserService
-// todo(перенести весь текст в template)
+
 @HandlerComponent
 class TicketHandler(
     private val ticketService: TicketService,
@@ -31,151 +30,190 @@ class TicketHandler(
 
     callback("create_ticket", next = "ask_description") {
         transfer(mutableMapOf("files" to mutableListOf<Attachment>()))
-        sendMessage(
-            "🎫 *Создание новой заявки*\n\n" +
-                    "Пожалуйста, опишите, в чем проблема? (1–2 предложения)",
-            parseMode = "Markdown",
-            replyMarkup = removeKeyboard())
+        sendMessage(template.getTicketAskDescription)
     }
 
-    step("ask_description", type = TEXT) {
+    step("ask_description", type = TEXT, next = "ask_attachments") {
         val desc = text.trim()
 
-        continueTransferringPlus("description" to desc)
+        val draft = continueTransferringPlus("description" to desc)
 
-        sendMessage(
-            "✅ *Принял описание:* $desc\n\n" +
-                    "Хотите прикрепить вложения? Можно до 5 штук.",
-            parseMode = "Markdown",
+        sendMessage(template.getTicketDescriptionAccepted with mapOf("desc" to desc),
             replyMarkup = inlineKeyboard(
-                callbackButton("📎 Прикрепить файлы", "attach_files"),
-                callbackButton("⏭️ Пропустить",       "skip_attachments")))
+                callbackButton("📎 Прикрепить файлы", "attach_files", draft),
+                callbackButton("⏭️ Пропустить", "skip_attachments", draft)))
     }
 
     callback("attach_files", next = "receiving_files") {
-        val map = transferred<MutableMap<String, Any>>()
-        transfer(map)
-
-        sendMessage("📎 *Прикрепление файлов*\n\n" +
-                    "Отправьте фото или документы. После каждого — увидите счётчик и кнопку «Готово».\n" +
-                    "Максимум 5.",
-            parseMode = "Markdown",
-            replyMarkup = removeKeyboard())
+        transfer(transferred())
+        sendMessage(template.getTicketAttachFilesPrompt)
     }
 
     callback("skip_attachments", next = "confirm_ticket") {
-        val map         = transferred<MutableMap<String, Any>>()
-        val files       = map["files"] as List<Attachment>
-        val user        = telegramUserService.getByChatId(fromId)
-        val description = map["description"] as String
-
+        val map = transferred<MutableMap<String, Any>>()
+        val files = map["files"] as MutableList<Attachment>
+        val user = telegramUserService.getByChatId(fromId)
+        val description = map["description"] as? String ?: "не указано"
         transfer(map)
 
-        val summary = buildString {
+        val confirmationText = buildString {
             append("📋 *Подтверждение заявки*\n\n")
-            append("👤 ФИО: ${user.fullName ?: "Не указано"}\n")
-            append("✉️ Почта: ${user.email     ?: "Не указана"}\n")
-            append("📱 Контакт: ${user.phone    ?: "Не указан"}\n")
-            append("📝 Описание: $description\n")
-            append("📎 Вложения: ${files.size} шт.\n\n")
+            append("Проверьте данные перед отправкой заявки:\n\n")
+            append("👤 *ФИО:* ${user.fullName ?: "Не указано"}\n")
+            append("📧 *Почта:* ${user.email ?: "Не указано"}\n")
+            append("📱 *Контакт:* ${user.phone ?: "Не указано"}\n")
+            append("📝 *Описание:* $description\n")
+            append("📎 *Вложения:* ${files.size} файла(ов)\n\n")
             append("Всё верно?")
         }
 
-        sendMessage(summary,
-            parseMode = "Markdown",
-            replyMarkup = inlineKeyboard(callbackButton("✅ Отправить заявку", "submit_ticket"),
-                                         callbackButton("❌ Отменить", "cancel_ticket")))
+        sendMessage(confirmationText,
+            replyMarkup = inlineKeyboard(
+                callbackButton(template.getSendTicket, "submit_ticket", map),
+                callbackButton(template.getCancelTicket, "cancel_ticket", map)))
     }
 
-    step("receiving_files", type = DOCUMENT) {
-        val map   = transferred<MutableMap<String, Any>>()
-        transfer(map)
+    step("receiving_files", type = DOCUMENT, next = "receiving_files") {
+        val doc = document
+        val map = transferred<MutableMap<String, Any>>()
         val files = map["files"] as MutableList<Attachment>
 
         if (files.size >= 5) {
-            sendMessage("⚠️ Максимум 5 файлов! Нажмите «Готово» для продолжения.")
+            sendMessage(template.getTicketMaxFilesError)
             return@step
         }
 
         files.add(Attachment(
-                fileId   = document.fileId,
-                fileName = document.fileName ?: "document",
-                type     = FileType.DOCUMENT,
-                fileSize = document.fileSize))
+            fileId = doc.fileId,
+            fileName = doc.fileName ?: "document",
+            type = FileType.DOCUMENT,
+            fileSize = doc.fileSize))
+
+        map["files"] = files
         transfer(map)
 
-        val names = files.joinToString(", ") { it.fileName.toString() }
-        sendMessage(
-            "✅ Вложения: $names\n" +
-                    "📊 Получено файлов: ${files.size}\n" +
-                    "Отправь ещё или нажми «Готово»",
-            parseMode = "Markdown",
-            replyMarkup = inlineKeyboard(callbackButton("✅ Готово", "done_attachments")))
+        sendMessage(template.getTicketFileSaved with mapOf("fileName" to doc.fileName, "size" to files.size),
+            replyMarkup = inlineKeyboard(callbackButton(template.getDoneTicket, "done_attachments", map)))
     }
 
-    step("receiving_files", type = PHOTO) {
-        val best  = photos.maxByOrNull { it.fileSize ?: 0 }!!
-        val map   = transferred<MutableMap<String, Any>>()
+    step("receiving_files", type = PHOTO, next = "receiving_files") {
+        val photo = photos.maxByOrNull { it.fileSize ?: 0 } ?: photos.last()
+        val map = transferred<MutableMap<String, Any>>()
         val files = map["files"] as MutableList<Attachment>
 
         if (files.size >= 5) {
-            sendMessage("⚠️ Максимум 5 файлов! Нажмите «Готово» для продолжения.")
+            sendMessage(template.getTicketMaxFilesError)
             return@step
         }
 
-        files.add( Attachment(
-            fileId   = best.fileId,
+        files.add(Attachment(
+            fileId = photo.fileId,
             fileName = "photo_${System.currentTimeMillis()}.jpg",
-            type     = FileType.PHOTO,
-            fileSize = best.fileSize?.toLong()))
+            type = FileType.PHOTO,
+            fileSize = photo.fileSize?.toLong()))
+
+        map["files"] = files
         transfer(map)
 
-        val names = files.joinToString(", ") { it.fileName.toString() }
-        sendMessage("✅ Вложения: $names\n" +
-                            "📊 Получено файлов: ${files.size}\n" +
-                            "Отправь ещё или нажми «Готово»",
-                    parseMode = "Markdown",
-                    replyMarkup = inlineKeyboard(callbackButton("✅ Готово", "done_attachments")))
+        sendMessage(template.getTicketPhotoSaved with mapOf("size" to files.size),
+            replyMarkup = inlineKeyboard(callbackButton(template.getDoneTicket, "done_attachments", map)))
+    }
+
+    step("receiving_files", type = TEXT, next = "receiving_files") {
+        sendMessage(template.getTicketNoTextAllowed)
     }
 
     callback("done_attachments", next = "confirm_ticket") {
-        val map         = transferred<MutableMap<String, Any>>()
-        val files       = map["files"] as List<Attachment>
-        val user        = telegramUserService.getByChatId(fromId)
-        val description = map["description"] as String
+        val map = transferred<MutableMap<String, Any>>()
+        val files = map["files"] as MutableList<Attachment>
+        val user = telegramUserService.getByChatId(fromId)
+        val description = map["description"] as? String ?: "не указано"
+        transfer(map)
 
-        val summary = buildString {
+        val confirmationText = buildString {
             append("📋 *Подтверждение заявки*\n\n")
-            append("👤 ФИО: ${user.fullName ?: "Не указано"}\n")
-            append("✉️ Почта: ${user.email     ?: "Не указана"}\n")
-            append("📱 Контакт: ${user.phone    ?: "Не указан"}\n")
-            append("📝 Описание: $description\n")
-            append("📎 Вложения: ${files.size} шт.\n\n")
+            append("Проверьте данные перед отправкой заявки:\n\n")
+            append("👤 *ФИО:* ${user.fullName ?: "Не указано"}\n")
+            append("📧 *Почта:* ${user.email ?: "Не указано"}\n")
+            append("📱 *Контакт:* ${user.phone ?: "Не указано"}\n")
+            append("📝 *Описание:* $description\n")
+            append("📎 *Вложения:* ${files.size} файла(ов)\n\n")
             append("Всё верно?")
         }
 
-        sendMessage(summary,
-                    parseMode = "Markdown",
-                    replyMarkup = inlineKeyboard(callbackButton("✅ Отправить заявку", "submit_ticket"),
-                                                 callbackButton("❌ Отменить",         "cancel_ticket")))
+        sendMessage(confirmationText,
+            replyMarkup = inlineKeyboard(
+                callbackButton(template.getSendTicket, "submit_ticket", map),
+                callbackButton(template.getCancelTicket, "cancel_ticket", map)))
     }
 
     callback("submit_ticket") {
-        val map   = transferred<MutableMap<String, Any>>()
-        val user  = telegramUserService.getByChatId(fromId)
-        val desc  = map["description"] as String
-        val files = map["files"]       as List<Attachment>
+        val map = transferred<MutableMap<String, Any>>()
+        val user = telegramUserService.getByChatId(fromId)
+        transfer(map)
 
-        val ticket = ticketService.upsert(CreateTicketArgument(
-            description     = desc,
-            files           = files,
+        sendMessage(template.getFinalSendTicket)
+
+        val description = map["description"] as? String
+        val files = map["files"] as MutableList<Attachment>
+
+        val arg = CreateTicketArgument(
+            description = description,
+            files = files,
             attachmentCount = files.size,
-            owner           = user))
-        sendMessage("✅ Заявка #${ticket.id} создана!", replyMarkup = removeKeyboard())
+            owner = user)
+
+        val ticket = ticketService.create(arg)
+
+        sendMessage(
+            "🎉 *Заявка успешно создана!*\n\n" +
+                    "📋 *Номер вашей заявки:* #${ticket.id}\n" +
+                    "📝 *Описание:* ${ticket.description}\n" +
+                    "📎 *Вложений:* ${files.size}\n\n" +
+                    "Ваша заявка принята в обработку. Мы свяжемся с вами в ближайшее время.",
+            parseMode = "Markdown",
+            replyMarkup = inlineKeyboard(
+                callbackButton(template.getAnotherOneTicket, "create_ticket"),
+                callbackButton(template.getMyTicketsButton, "my_tickets")))
     }
 
     callback("cancel_ticket") {
-        transfer(mutableMapOf<String, Any>())
-        sendMessage("❌ Создание заявки отменено.", replyMarkup = removeKeyboard())
+        sendMessage(template.getCancelTicketAndMainMenu,
+                    replyMarkup = inlineKeyboard(callbackButton(template.getMainMenu, "main_menu"),
+                                                 callbackButton(template.getNewTicket, "create_ticket")))
     }
-})
+
+    callback("my_tickets") {
+        val user = telegramUserService.getByChatId(fromId)
+        val tickets = ticketService.getTicketsByOwnerChatId(user.chatId)
+
+        if (tickets.isEmpty()) {
+            sendMessage(
+                "📋 *Мои заявки*\n\n" +
+                        "У вас ещё нет заявок.",
+                parseMode = "Markdown",
+                replyMarkup = inlineKeyboard(callbackButton(template.getAnotherNewTicket, "create_ticket")))
+        } else {
+            val text = buildString {
+                append("📋 *Ваши заявки:*\n\n")
+                tickets.forEachIndexed { index, ticket ->
+                    append("${index + 1}. *#${ticket.id}* — ${ticket.description ?: "без описания"}\n")
+                    ticket.attachmentCount?.let {
+                        if (it > 0) {
+                            append("📎 Вложений: ${ticket.attachmentCount}\n")
+                        }
+                    }
+                    append("\n")
+                }
+            }
+            sendMessage(text, parseMode = "Markdown", replyMarkup = inlineKeyboard(callbackButton(template.getAnotherNewTicket, "create_ticket")))
+            }
+        }
+
+        callback("main_menu") {
+            sendMessage(template.getMainMenuPrompt,
+                replyMarkup = inlineKeyboard(
+                    callbackButton(template.getAnotherNewTicket, "create_ticket"),
+                    callbackButton(template.getMyTicketsButton, "my_tickets")))
+        }
+    })
