@@ -26,6 +26,6 @@ class TelegramUserService(
     }
 
     suspend fun getByChatId(chatId: Long) = transactional(readOnly = true) {
-        repository.findByChatId(chatId) ?: throw ConflictException("User.notFound")
+        repository.findByChatId(chatId) ?: throw ConflictException("Пользователь не найден")
     }
 }

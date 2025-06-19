@@ -25,6 +25,11 @@ class TicketService(
 
     suspend fun getTicketsByOwnerChatId(chatId: Long): List<Ticket> = transactional(readOnly = true) {
         repository.findAllByOwnerChatId(chatId)
-            ?: throw ConflictException("Tickets.notFound")
+            ?: throw ConflictException("Заявки не найдены")
+    }
+
+    suspend fun getTicketsBySubmittedAtBetween(from: LocalDateTime, to: LocalDateTime): List<Ticket> = transactional(readOnly = true) {
+        repository.findAllBySubmittedAtBetween(from, to)
+            ?: throw ConflictException("Заявки не найдены")
     }
 }

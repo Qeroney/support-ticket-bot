@@ -32,39 +32,39 @@ class StartHandler(
     }
 
     command("/start") {
-        sendMessage(template.getStartWelcome,
-            replyMarkup = inlineKeyboard(callbackButton(template.getRegistration, "get_fullName")))
+        sendMessage(template.startWelcome,
+            replyMarkup = inlineKeyboard(callbackButton(template.registration, "get_fullName")))
     }
 
     callback("get_fullName", next = "get_enter_fullName") {
-        sendMessage(template.getAskFullName)
+        sendMessage(template.askFullName)
     }
 
     step("get_enter_fullName", type = TEXT, next = "get_email") {
         val input = text.trim()
-        if (input.length < 5 || !input.contains(' ')) throw ChatException(template.getFullNameFormatError)
+        if (input.length < 5 || !input.contains(' ')) throw ChatException(template.fullNameFormatError)
 
         continueTransferringPlus("fullName" to input)
 
-        sendMessage(template.getFullNameSaved with mapOf("fullName" to input), replyMarkup = removeKeyboard())
-        sendMessage(template.getEmailPrompt, replyMarkup = removeKeyboard())
+        sendMessage(template.fullNameSaved with mapOf("fullName" to input), replyMarkup = removeKeyboard())
+        sendMessage(template.emailPrompt, replyMarkup = removeKeyboard())
     }
 
     step("get_email", type = TEXT, next = "get_confirm_email") {
         val email = text.trim().lowercase()
-        if (!emailRegex.matches(email)) throw ChatException(template.getEmailFormatError)
+        if (!emailRegex.matches(email)) throw ChatException(template.emailFormatError)
 
         val verificationCode = Random.nextInt(0, 1_000_000).let { String.format("%06d", it) }
         continueTransferringPlus("email" to email, "verificationCode" to verificationCode)
 
         notificationService.sendVerificationCodeToEmail(email, verificationCode)
-        sendMessage(template.getEmailSent with mapOf("email" to email),
-                    replyMarkup = inlineKeyboard(callbackButton(template.getEmailChange, "get_change_email")))
+        sendMessage(template.emailSent with mapOf("email" to email),
+                    replyMarkup = inlineKeyboard(callbackButton(template.emailChange, "get_change_email")))
     }
 
     callback("get_change_email", next = "get_email") {
         transfer(transferred())
-        sendMessage(template.getNewEmail, replyMarkup = removeKeyboard())
+        sendMessage(template.newEmail, replyMarkup = removeKeyboard())
     }
 
     step("get_confirm_email", type = TEXT, next = "get_contact") {
@@ -73,18 +73,18 @@ class StartHandler(
         val realCode = map["verificationCode"]?.toString()
         transfer(map)
 
-        if (inputCode != realCode) throw ChatException(template.getEmailCodeMismatchError)
+        if (inputCode != realCode) throw ChatException(template.emailCodeMismatchError)
 
-        sendMessage(template.getEmailSaved with mapOf("email" to map["email"].toString()), replyMarkup = removeKeyboard())
-        sendMessage(template.getAskContact, replyMarkup = contactKeyboard(template.getSendContact))
+        sendMessage(template.emailSaved with mapOf("email" to map["email"].toString()), replyMarkup = removeKeyboard())
+        sendMessage(template.askContact, replyMarkup = contactKeyboard(template.sendContact))
     }
 
     step("get_contact", type = TEXT) {
-        throw ChatException(template.getContactOnlyByButton)
+        throw ChatException(template.contactOnlyByButton)
     }
 
     step("get_contact", type = CONTACT) {
-        if (contact.userId != fromId) throw ChatException(template.getContactWrongUser)
+        if (contact.userId != fromId) throw ChatException(template.contactWrongUser)
 
         val phone = contact.phoneNumber
 
@@ -96,10 +96,10 @@ class StartHandler(
             phone    = phone)
         telegramUserService.upsert(createUser)
 
-        sendMessage(template.getContactSaved with mapOf("phone" to phone), replyMarkup = removeKeyboard())
-        sendMessage(template.getRegistrationSuccess,
+        sendMessage(template.contactSaved with mapOf("phone" to phone), replyMarkup = removeKeyboard())
+        sendMessage(template.registrationSuccess,
                     replyMarkup = inlineKeyboard(
-                        callbackButton(template.getCreateTicketButton, "create_ticket"),
-                        callbackButton(template.getMyTicketsButton, "my_tickets")))
+                        callbackButton(template.createTicketButton, "create_ticket"),
+                        callbackButton(template.myTicketsButton, "my_tickets")))
     }
 })
