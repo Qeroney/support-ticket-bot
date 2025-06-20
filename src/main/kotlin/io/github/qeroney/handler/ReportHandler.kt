@@ -17,15 +17,15 @@ class ReportHandler(
     private val ticketService: TicketService,
     private val reportProperties: ReportProperties) : BotHandler({
 
-    val adminIds = reportProperties.adminIds
+    val chatIds = reportProperties.chatIds
     val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-    val parse = { str: String, hour: Int, min: Int, sec: Int ->
-        runCatching { LocalDate.parse(str, formatter).atTime(hour, min, sec) }.getOrNull()
+    val parse: (String) -> LocalDate? = { str ->
+        runCatching { LocalDate.parse(str, formatter) }.getOrNull()
     }
 
-    command("/report_tracked") {
-        if (fromId !in adminIds) {
+    command("/report_tickets") {
+        if (fromId !in chatIds) {
             sendMessage(template.reportNoAccessError)
             return@command
         }
@@ -36,10 +36,10 @@ class ReportHandler(
             return@command
         }
 
-        val dateFrom = parse(args[1], 0, 0, 0) ?: sendMessage(template.reportBadTimeError with mapOf("args" to args[1])).let { return@command }
-        val dateTo = parse(args[2], 23, 59, 59) ?: sendMessage(template.reportBadTimeError with mapOf("args" to args[2])).let { return@command }
+        val dateFrom = parse(args[1])?.atStartOfDay() ?: sendMessage(template.reportBadTimeError with mapOf("args" to args[1])).let { return@command }
+        val dateTo = parse(args[2])?.atTime(23, 59, 59) ?: sendMessage(template.reportBadTimeError with mapOf("args" to args[2])).let { return@command }
 
-        val tickets = ticketService.getTicketsBySubmittedAtBetween(dateFrom, dateTo)
+        val tickets = ticketService.getAllBySubmittedAtBetween(dateFrom, dateTo)
 
         if (tickets.isEmpty()) {
             sendMessage(template.reportEmptyTickets)

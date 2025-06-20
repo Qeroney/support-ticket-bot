@@ -2,13 +2,15 @@ package io.github.qeroney.service.notification
 
 import io.github.qeroney.config.FreeMarkerConfig
 import io.github.qeroney.model.Attachment
-import io.github.qeroney.service.notification.argument.CreateTicketNotificationArgument
+import io.github.qeroney.model.Ticket
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
 import java.io.StringWriter
+import java.nio.file.Files
 import java.nio.file.Paths
+import java.time.format.DateTimeFormatter
 
 @Service
 class SendNotificationService(
@@ -16,7 +18,27 @@ class SendNotificationService(
     private val fmConfig: FreeMarkerConfig,
     @Value("\${spring.mail.username}") private val from: String) {
 
-    private fun processTemplate(templateName: String, model: Map<String, Any>): String =
+    fun sendTicketNotification(ticket: Ticket) {
+        val subject = "Инцидент \"${ticket.owner.fullName}\""
+
+        val vars = mapOf(
+            "fio" to ticket.owner.fullName,
+            "email" to ticket.owner.email,
+            "phone" to ticket.owner.phone,
+            "description" to ticket.description,
+            "attachmentsCount" to ticket.attachmentCount,
+            "createdAt" to ticket.submittedAt!!.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'МСК'")))
+
+        val html = processTemplate("ticket-notification.ftl", vars)
+        sendHtml(from, subject, html, ticket.files ?: emptyList())
+    }
+
+    fun sendVerificationCodeToEmail(email: String, code: String) {
+        val html = processTemplate("verification-code.ftl", mapOf("code" to code))
+        sendHtml(email, "Ваш код подтверждения", html)
+    }
+
+    private fun processTemplate(templateName: String, model: Map<String, *>): String =
         StringWriter().use { writer ->
             fmConfig.freemarkerConfiguration().getTemplate(templateName).process(model, writer)
             writer.toString()
@@ -29,28 +51,21 @@ class SendNotificationService(
             setTo(to)
             setSubject(subject)
             setText(htmlBody, true)
-            attachments.forEach {
-                Paths.get("files", "attachments", it.fileName).toFile().takeIf { f -> f.exists() }?.let { f ->
-                    addAttachment(it.fileName ?: "attachment", f)
+            val dir = Paths.get("files", "attachments")
+            attachments.forEach { attachment ->
+                val matchedFiles = Files.list(dir)
+                    .filter { path -> path.fileName.toString().startsWith(attachment.fileId + ".") }
+                    .toList()
+
+                matchedFiles.forEach { path ->
+                    val file = path.toFile()
+                    if (file.exists()) {
+                        val name = attachment.fileName ?: file.name
+                        addAttachment(name, file)
+                    }
                 }
             }
         }
         mailSender.send(msg)
-    }
-
-    fun sendTicketNotification(arg: CreateTicketNotificationArgument) {
-        val html = processTemplate("ticket-notification.ftl", mapOf(
-            "fio" to arg.fio,
-            "email" to arg.email,
-            "phone" to arg.phone,
-            "description" to arg.description,
-            "attachmentsCount" to arg.attachments.size,
-            "createdAt" to arg.createdAt))
-        sendHtml(arg.to, "Инцидент \"${arg.fio}\"", html, arg.attachments)
-    }
-
-    fun sendVerificationCodeToEmail(email: String, code: String) {
-        val html = processTemplate("verification-code.ftl", mapOf("code" to code))
-        sendHtml(email, "Ваш код подтверждения", html)
     }
 }

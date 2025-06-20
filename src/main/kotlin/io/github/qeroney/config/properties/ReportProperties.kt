@@ -4,5 +4,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 @ConfigurationProperties(prefix = "report")
 class ReportProperties {
-    var adminIds: Set<Long> = setOf()
+    var chatIds: Set<Long> = setOf()
 }

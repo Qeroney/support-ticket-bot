@@ -1,7 +1,7 @@
 package io.github.qeroney.service.user
 
+import io.github.dehuckakpyt.telegrambot.exception.chat.ChatException
 import io.github.dehuckakpyt.telegrambot.transaction.action.TransactionAction
-import io.github.qeroney.exception.ConflictException
 import io.github.qeroney.model.TelegramUser
 import io.github.qeroney.repository.TelegramUserRepository
 import io.github.qeroney.service.user.argument.CreateTelegramUser
@@ -26,6 +26,6 @@ class TelegramUserService(
     }
 
     suspend fun getByChatId(chatId: Long) = transactional(readOnly = true) {
-        repository.findByChatId(chatId) ?: throw ConflictException("Пользователь не найден")
+        repository.findByChatId(chatId) ?: throw ChatException("Пользователь не найден")
     }
 }

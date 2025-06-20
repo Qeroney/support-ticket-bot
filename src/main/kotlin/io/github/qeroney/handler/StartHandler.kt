@@ -55,11 +55,11 @@ class StartHandler(
         if (!emailRegex.matches(email)) throw ChatException(template.emailFormatError)
 
         val verificationCode = Random.nextInt(0, 1_000_000).let { String.format("%06d", it) }
-        continueTransferringPlus("email" to email, "verificationCode" to verificationCode)
+        val map = continueTransferringPlus("email" to email, "verificationCode" to verificationCode)
 
         notificationService.sendVerificationCodeToEmail(email, verificationCode)
         sendMessage(template.emailSent with mapOf("email" to email),
-                    replyMarkup = inlineKeyboard(callbackButton(template.emailChange, "get_change_email")))
+                    replyMarkup = inlineKeyboard(callbackButton(template.emailChange, "get_change_email", map)))
     }
 
     callback("get_change_email", next = "get_email") {

@@ -6,7 +6,6 @@ import org.hibernate.annotations.TypeDef
 import java.time.LocalDateTime
 import javax.persistence.Column
 import javax.persistence.Entity
-import javax.persistence.FetchType
 import javax.persistence.GeneratedValue
 import javax.persistence.GenerationType
 import javax.persistence.Id
@@ -37,7 +36,7 @@ class Ticket (
     var description: String?,
 
     /** Привязка к пользователю */
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne
     @JoinColumn(name = "owner_id", nullable = false)
     var owner: TelegramUser
 )

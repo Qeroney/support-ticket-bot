@@ -9,7 +9,6 @@ import io.github.qeroney.config.properties.ReportProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import io.github.qeroney.exception.ExceptionHandler
 
 @Configuration
 @EnableTelegramBot
@@ -19,6 +18,5 @@ class BotConfig {
     @Bean
     fun telegramBotConfig(): TelegramBotConfig = TelegramBotConfig().apply {
         templater = { Templater.dynamicFreeMarker }
-        receiving { exceptionHandler = { ExceptionHandler(telegramBot, receiving.messageTemplate, templater) } }
     }
 }

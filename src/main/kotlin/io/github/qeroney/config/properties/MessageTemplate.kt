@@ -2,9 +2,7 @@ package io.github.qeroney.config.properties
 
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.ConstructorBinding
-import org.springframework.context.annotation.PropertySource
 
-@PropertySource("classpath:messages.properties")
 @ConfigurationProperties(prefix = "telegram-bot.template")
 class MessageTemplate @ConstructorBinding constructor(
 
