@@ -7,8 +7,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
+import java.io.FilenameFilter
 import java.io.StringWriter
-import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.format.DateTimeFormatter
 
@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
 class SendNotificationService(
     private val mailSender: JavaMailSender,
     private val fmConfig: FreeMarkerConfig,
-    @Value("\${spring.mail.username}") private val from: String) {
+    @Value("\${spring.mail.username}") private val email: String) {
 
     fun sendTicketNotification(ticket: Ticket) {
         val subject = "Инцидент \"${ticket.owner.fullName}\""
@@ -30,7 +30,7 @@ class SendNotificationService(
             "createdAt" to ticket.submittedAt!!.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'МСК'")))
 
         val html = processTemplate("ticket-notification.ftl", vars)
-        sendHtml(from, subject, html, ticket.files ?: emptyList())
+        sendHtml(email, subject, html, ticket.files ?: emptyList())
     }
 
     fun sendVerificationCodeToEmail(email: String, code: String) {
@@ -47,22 +47,17 @@ class SendNotificationService(
     private fun sendHtml(to: String, subject: String, htmlBody: String, attachments: List<Attachment> = emptyList()) {
         val msg = mailSender.createMimeMessage()
         MimeMessageHelper(msg, true, "UTF-8").apply {
-            setFrom(from)
+            setFrom(email)
             setTo(to)
             setSubject(subject)
             setText(htmlBody, true)
             val dir = Paths.get("files", "attachments")
             attachments.forEach { attachment ->
-                val matchedFiles = Files.list(dir)
-                    .filter { path -> path.fileName.toString().startsWith(attachment.fileId + ".") }
-                    .toList()
-
-                matchedFiles.forEach { path ->
-                    val file = path.toFile()
-                    if (file.exists()) {
-                        val name = attachment.fileName ?: file.name
-                        addAttachment(name, file)
-                    }
+                val filter = FilenameFilter { _, name -> name.startsWith(attachment.fileId + ".") }
+                val matchedFiles = dir.toFile().listFiles(filter) ?: emptyArray()
+                matchedFiles.forEach { file ->
+                    val name = attachment.fileName ?: file.name
+                    addAttachment(name, file)
                 }
             }
         }
