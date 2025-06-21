@@ -16,7 +16,8 @@ import java.time.format.DateTimeFormatter
 class SendNotificationService(
     private val mailSender: JavaMailSender,
     private val fmConfig: FreeMarkerConfig,
-    @Value("\${spring.mail.username}") private val email: String) {
+    @Value("\${spring.mail.recipient}") private val recipient: String,
+    @Value("\${spring.mail.sender}") private val sender: String) {
 
     fun sendTicketNotification(ticket: Ticket) {
         val subject = "Инцидент \"${ticket.owner.fullName}\""
@@ -30,7 +31,7 @@ class SendNotificationService(
             "createdAt" to ticket.submittedAt!!.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'МСК'")))
 
         val html = processTemplate("ticket-notification.ftl", vars)
-        sendHtml(email, subject, html, ticket.files ?: emptyList())
+        sendHtml(recipient, subject, html, ticket.files ?: emptyList())
     }
 
     fun sendVerificationCodeToEmail(email: String, code: String) {
@@ -47,7 +48,7 @@ class SendNotificationService(
     private fun sendHtml(to: String, subject: String, htmlBody: String, attachments: List<Attachment> = emptyList()) {
         val msg = mailSender.createMimeMessage()
         MimeMessageHelper(msg, true, "UTF-8").apply {
-            setFrom(email)
+            setFrom(sender)
             setTo(to)
             setSubject(subject)
             setText(htmlBody, true)
